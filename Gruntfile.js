@@ -1,7 +1,7 @@
 /* global require, module */
-module.exports = function(grunt) {
+import * as grunt from 'grunt';
+export default function(grunt: grunt.Grunt) {
   'use strict';
-
   // Project configuration.
   grunt.initConfig({
     pkg: grunt.file.readJSON('package.json'),
@@ -89,16 +89,12 @@ module.exports = function(grunt) {
       }
     }
   });
-
   // Load the plugin that provides the "jshint" task.
   grunt.loadNpmTasks('grunt-contrib-jshint');
-
   // Load the plugin that provides the "concat" task.
   grunt.loadNpmTasks('grunt-contrib-concat');
-
   // Load the plugin that provides the "uglify" task.
   grunt.loadNpmTasks('grunt-contrib-uglify');
-
   grunt.registerTask('stage', 'git add files before running the release task', function () {
     var files = this.options().files;
     grunt.util.spawn({
@@ -106,23 +102,17 @@ module.exports = function(grunt) {
       args: ['add'].concat(files)
     }, grunt.task.current.async());
   });
-
   // Default task.
   grunt.registerTask('default', ['test']);
-
   // Static analysis
   grunt.registerTask('lint', ['jshint']);
-
   // Test tasks.
   grunt.registerTask('test', ['jshint', 'karma:test']);
   grunt.registerTask('test-server', ['karma:server']);
-
   // Build task.
   grunt.registerTask('build', ['test', 'concat', 'uglify']);
-
   // Release task.
   grunt.registerTask('release', ['build']);
-
   // Provides the "karma" task.
   grunt.registerMultiTask('karma', 'Starts up a karma server.', function() {
     var karma = require('karma'),
