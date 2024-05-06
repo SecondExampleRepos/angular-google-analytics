@@ -1,9 +1,12 @@
 /* global afterEach, before, beforeEach, console, describe, document, expect, inject, it, module, spyOn */
+import { AnalyticsProvider, Analytics } from './analytics-types'; // Assuming types are defined in analytics-types.ts
+import { Module, Inject } from '@angular/core';
+import { WindowService } from './window.service'; // Assuming WindowService wraps window object
 'use strict';
 
 describe('universal analytics scenarios', function () {
-  beforeEach(module('angular-google-analytics'));
-  beforeEach(module(function (AnalyticsProvider) {
+  beforeEach(() => Module('angular-google-analytics'));
+  beforeEach(() => Module((AnalyticsProvider: AnalyticsProvider) => {
     AnalyticsProvider
       .setAccount('UA-XXXXXX-xx')
       .useECommerce(true, true)
@@ -12,15 +15,16 @@ describe('universal analytics scenarios', function () {
       .enterTestMode();
   }));
 
-  afterEach(inject(function (Analytics) {
+  afterEach(() => Inject((Analytics: Analytics) => {
     Analytics.log.length = 0; // clear log
   }));
 
   it('should handle e-commerce scenario #1', function () {
-    inject(function ($window) {
+    Inject(($window: WindowService) => {
       spyOn($window, 'ga');
-      inject(function (Analytics) {
-        var i, count, expected = [
+      Inject((Analytics: Analytics) => {
+        let i: number, count: number;
+        const expected: Array<Array<any>> = [
           ['inject', '//www.google-analytics.com/analytics.js'], // This entry is in the log only due to test mode
           ['create', 'UA-XXXXXX-xx', {}],
           ['require', 'ec'],
