@@ -1,6 +1,8 @@
 import { SourceMapGenerator } from 'source-map';
 
-// Define the TypeScript service class
+/**
+ * TypeScript service to handle source maps.
+ */
 export class SourceMapService {
   private sourceMapGenerator: SourceMapGenerator;
 
@@ -10,10 +12,17 @@ export class SourceMapService {
     });
   }
 
-  // Add a mapping to the source map
-  addMapping(source: string, generatedLine: number, generatedColumn: number, originalLine: number, originalColumn: number, name?: string) {
+  /**
+   * Adds a mapping to the source map.
+   * @param generatedLine The line number in the generated file.
+   * @param generatedColumn The column number in the generated file.
+   * @param originalLine The line number in the original source file.
+   * @param originalColumn The column number in the original source file.
+   * @param source The file name of the original source file.
+   * @param name An optional name of the original identifier.
+   */
+  addMapping(generatedLine: number, generatedColumn: number, originalLine: number, originalColumn: number, source: string, name?: string) {
     this.sourceMapGenerator.addMapping({
-      source,
       generated: {
         line: generatedLine,
         column: generatedColumn
@@ -22,16 +31,24 @@ export class SourceMapService {
         line: originalLine,
         column: originalColumn
       },
-      name
+      source: source,
+      name: name
     });
   }
 
-  // Set the content for a source file
-  setSourceContent(source: string, sourceContent: string) {
-    this.sourceMapGenerator.setSourceContent(source, sourceContent);
+  /**
+   * Sets the source content for a source file.
+   * @param sourceFile The filename of the source file.
+   * @param sourceContent The content of the source file.
+   */
+  setSourceContent(sourceFile: string, sourceContent: string) {
+    this.sourceMapGenerator.setSourceContent(sourceFile, sourceContent);
   }
 
-  // Generate the source map
+  /**
+   * Generates the source map.
+   * @returns The JSON string representation of the source map.
+   */
   generateSourceMap(): string {
     return this.sourceMapGenerator.toString();
   }
