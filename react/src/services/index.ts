@@ -1,157 +1,90 @@
-import { basename, extname } from 'path';
-import { types, template } from '@babel/core';
-import { declare } from '@babel/helper-plugin-utils';
-import { 
-  isModule, 
-  getModuleName, 
-  rewriteModuleStatementsAndPrepareHeader, 
-  hasExports, 
-  isSideEffectImport, 
-  wrapInterop, 
-  buildNamespaceInitStatements, 
-  ensureStatementsHoisted 
-} from '@babel/helper-module-transforms';
+import * as babelHelperPluginUtils from '@babel/helper-plugin-utils';
+import * as babelHelperCompilationTargets from '@babel/helper-compilation-targets';
+import * as utils from './utils';
+import ImportsInjector from './imports-injector';
+import * as debugUtils from './debug-utils';
+import * as normalizeOptions from './normalize-options';
+import * as visitors from './visitors';
+import * as dependencies from './node/dependencies';
+import MetaResolver from './meta-resolver';
 
-const buildPrerequisiteAssignment = template(`
-  GLOBAL_REFERENCE = GLOBAL_REFERENCE || {}
-`);
+type PolyfillProviderOptions = {
+    method: string;
+    targets?: string | string[] | Record<string, unknown>;
+    ignoreBrowserslistConfig?: boolean;
+    configPath?: string;
+    debug?: boolean;
+    shouldInjectPolyfill?: (name: string, shouldInject: boolean) => boolean;
+    absoluteImports?: boolean | string;
+};
 
-const buildWrapper = template(`
-  (function (global, factory) {
-    if (typeof define === 'function' && define.amd) {
-      define(MODULE_NAME, AMD_ARGUMENTS, factory);
-    } else if (typeof exports !== 'undefined') {
-      factory(COMMONJS_ARGUMENTS);
-    } else {
-      var mod = { exports: {} };
-      factory(BROWSER_ARGUMENTS);
-      GLOBAL_TO_ASSIGN;
-    }
-  })(
-    typeof globalThis !== 'undefined' ? globalThis
-      : typeof self !== 'undefined' ? self
-      : this,
-    function(IMPORT_NAMES) {
-  })
-`);
+class PolyfillService {
+    private getTargets = babelHelperCompilationTargets.default.default || babelHelperCompilationTargets.default;
 
-const transformModulesUmd = declare((api, options) => {
-  api.assertVersion(7);
-  const {
-    globals,
-    exactGlobals,
-    allowTopLevelThis,
-    strict,
-    strictMode,
-    noInterop,
-    importInterop
-  } = options;
-  const constantReexports = api.assumption("constantReexports") ?? options.loose;
-  const enumerableModuleMeta = api.assumption("enumerableModuleMeta") ?? options.loose;
+    private resolveOptions(options: PolyfillProviderOptions, babelApi: any): any {
+        const {
+            method,
+            targets: targetsOption,
+            ignoreBrowserslistConfig,
+            configPath,
+            debug,
+            shouldInjectPolyfill,
+            absoluteImports
+        } = options;
+        const providerOptions = this.objectWithoutPropertiesLoose(options, ["method", "targets", "ignoreBrowserslistConfig", "configPath", "debug", "shouldInjectPolyfill", "absoluteImports"]);
 
-  function buildBrowserInit(browserGlobals: any, exactGlobals: boolean, filename: string, moduleName: any) {
-    const moduleNameOrBasename = moduleName ? moduleName.value : basename(filename, extname(filename));
-    let globalToAssign = types.memberExpression(types.identifier("global"), types.identifier(types.toIdentifier(moduleNameOrBasename)));
-    let initAssignments = [];
-    if (exactGlobals) {
-      const globalName = browserGlobals[moduleNameOrBasename];
-      if (globalName) {
-        initAssignments = [];
-        const members = globalName.split(".");
-        globalToAssign = members.slice(1).reduce((accum, curr) => {
-          initAssignments.push(buildPrerequisiteAssignment({
-            GLOBAL_REFERENCE: types.cloneNode(accum)
-          }));
-          return types.memberExpression(accum, types.identifier(curr));
-        }, types.memberExpression(types.identifier("global"), types.identifier(members[0])));
-      }
-    }
-    initAssignments.push(types.expressionStatement(types.assignmentExpression("=", globalToAssign, types.memberExpression(types.identifier("mod"), types.identifier("exports")))));
-    return initAssignments;
-  }
-
-  function buildBrowserArg(browserGlobals: any, exactGlobals: boolean, source: string) {
-    let memberExpression;
-    if (exactGlobals) {
-      const globalRef = browserGlobals[source];
-      if (globalRef) {
-        memberExpression = globalRef.split(".").reduce((accum, curr) => types.memberExpression(accum, types.identifier(curr)), types.identifier("global"));
-      } else {
-        memberExpression = types.memberExpression(types.identifier("global"), types.identifier(types.toIdentifier(source)));
-      }
-    } else {
-      const requireName = basename(source, extname(source));
-      const globalName = browserGlobals[requireName] || requireName;
-      memberExpression = types.memberExpression(types.identifier("global"), types.identifier(types.toIdentifier(globalName)));
-    }
-    return memberExpression;
-  }
-
-  return {
-    name: "transform-modules-umd",
-    visitor: {
-      Program: {
-        exit(path) {
-          if (!isModule(path)) return;
-          const browserGlobals = globals || {};
-          const moduleName = getModuleName(this.file.opts, options);
-          let moduleNameLiteral;
-          if (moduleName) moduleNameLiteral = types.stringLiteral(moduleName);
-          const { meta, headers } = rewriteModuleStatementsAndPrepareHeader(path, {
-            constantReexports,
-            enumerableModuleMeta,
-            strict,
-            strictMode,
-            allowTopLevelThis,
-            noInterop,
-            importInterop,
-            filename: this.file.opts.filename
-          });
-          const amdArgs = [];
-          const commonjsArgs = [];
-          const browserArgs = [];
-          const importNames = [];
-          if (hasExports(meta)) {
-            amdArgs.push(types.stringLiteral("exports"));
-            commonjsArgs.push(types.identifier("exports"));
-            browserArgs.push(types.memberExpression(types.identifier("mod"), types.identifier("exports")));
-            importNames.push(types.identifier(meta.exportName));
-          }
-          for (const [source, metadata] of meta.source) {
-            amdArgs.push(types.stringLiteral(source));
-            commonjsArgs.push(types.callExpression(types.identifier("require"), [types.stringLiteral(source)]));
-            browserArgs.push(buildBrowserArg(browserGlobals, exactGlobals, source));
-            importNames.push(types.identifier(metadata.name));
-            if (!isSideEffectImport(metadata)) {
-              const interop = wrapInterop(path, types.identifier(metadata.name), metadata.interop);
-              if (interop) {
-                const header = types.expressionStatement(types.assignmentExpression("=", types.identifier(metadata.name), interop));
-                header.loc = meta.loc;
-                headers.push(header);
-              }
-            }
-            headers.push(...buildNamespaceInitStatements(meta, metadata, constantReexports));
-          }
-          ensureStatementsHoisted(headers);
-          path.unshiftContainer("body", headers);
-          const { body, directives } = path.node;
-          path.node.directives = [];
-          path.node.body = [];
-          const umdWrapper = path.pushContainer("body", [buildWrapper({
-            MODULE_NAME: moduleNameLiteral,
-            AMD_ARGUMENTS: types.arrayExpression(amdArgs),
-            COMMONJS_ARGUMENTS: commonjsArgs,
-            BROWSER_ARGUMENTS: browserArgs,
-            IMPORT_NAMES: importNames,
-            GLOBAL_TO_ASSIGN: buildBrowserInit(browserGlobals, exactGlobals, this.filename || "unknown", moduleNameLiteral)
-          })])[0];
-          const umdFactory = umdWrapper.get("expression.arguments")[1].get("body");
-          umdFactory.pushContainer("directives", directives);
-          umdFactory.pushContainer("body", body);
+        if (this.isEmpty(options)) {
+            throw new Error(`This plugin requires options. See more options at https://github.com/babel/babel-polyfills/blob/main/docs/usage.md`);
         }
-      }
-    }
-  };
-});
 
-export default transformModulesUmd;
+        let methodName: string;
+        if (method === "usage-global") methodName = "usageGlobal";
+        else if (method === "entry-global") methodName = "entryGlobal";
+        else if (method === "usage-pure") methodName = "usagePure";
+        else if (typeof method !== "string") {
+            throw new Error(".method must be a string");
+        } else {
+            throw new Error(`.method must be one of "entry-global", "usage-global" or "usage-pure" (received ${JSON.stringify(method)})`);
+        }
+
+        let targets;
+        if (targetsOption || configPath || ignoreBrowserslistConfig) {
+            const targetsObj = typeof targetsOption === "string" || Array.isArray(targetsOption) ? { browsers: targetsOption } : targetsOption;
+            targets = this.getTargets(targetsObj, { ignoreBrowserslistConfig, configPath });
+        } else {
+            targets = babelApi.targets();
+        }
+
+        return {
+            method,
+            methodName,
+            targets,
+            absoluteImports: absoluteImports != null ? absoluteImports : false,
+            shouldInjectPolyfill,
+            debug: !!debug,
+            providerOptions
+        };
+    }
+
+    private objectWithoutPropertiesLoose(source: any, excluded: string[]) {
+        if (source == null) return {};
+        let target: any = {};
+        let sourceKeys = Object.keys(source);
+        let key: string, i: number;
+
+        for (i = 0; i < sourceKeys.length; i++) {
+            key = sourceKeys[i];
+            if (excluded.indexOf(key) >= 0) continue;
+            target[key] = source[key];
+        }
+        return target;
+    }
+
+    private isEmpty(obj: any): boolean {
+        return Object.keys(obj).length === 0;
+    }
+
+    // Additional methods and logic would be implemented here
+}
+
+export default PolyfillService;
