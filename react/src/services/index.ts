@@ -1,90 +1,142 @@
-import * as babelHelperPluginUtils from '@babel/helper-plugin-utils';
-import * as babelHelperCompilationTargets from '@babel/helper-compilation-targets';
-import * as utils from './utils';
-import ImportsInjector from './imports-injector';
-import * as debugUtils from './debug-utils';
-import * as normalizeOptions from './normalize-options';
-import * as visitors from './visitors';
-import * as dependencies from './node/dependencies';
-import MetaResolver from './meta-resolver';
+/*!
+ * SockJS-client v1.6.1
+ * http://sockjs.org
+ * WebSocket emulation - Javascript client
+ * (C) 2010-2021 SockJS Team
+ * Licensed under the MIT license
+ */
 
-type PolyfillProviderOptions = {
-    method: string;
-    targets?: string | string[] | Record<string, unknown>;
-    ignoreBrowserslistConfig?: boolean;
-    configPath?: string;
-    debug?: boolean;
-    shouldInjectPolyfill?: (name: string, shouldInject: boolean) => boolean;
-    absoluteImports?: boolean | string;
-};
-
-class PolyfillService {
-    private getTargets = babelHelperCompilationTargets.default.default || babelHelperCompilationTargets.default;
-
-    private resolveOptions(options: PolyfillProviderOptions, babelApi: any): any {
-        const {
-            method,
-            targets: targetsOption,
-            ignoreBrowserslistConfig,
-            configPath,
-            debug,
-            shouldInjectPolyfill,
-            absoluteImports
-        } = options;
-        const providerOptions = this.objectWithoutPropertiesLoose(options, ["method", "targets", "ignoreBrowserslistConfig", "configPath", "debug", "shouldInjectPolyfill", "absoluteImports"]);
-
-        if (this.isEmpty(options)) {
-            throw new Error(`This plugin requires options. See more options at https://github.com/babel/babel-polyfills/blob/main/docs/usage.md`);
+(function webpackUniversalModuleDefinition(root, factory) {
+    if (typeof exports === 'object' && typeof module === 'object')
+        module.exports = factory();
+    else if (typeof define === 'function' && define.amd)
+        define([], factory);
+    else if (typeof exports === 'object')
+        exports["SockJS"] = factory();
+    else
+        root["SockJS"] = factory();
+})(typeof self !== 'undefined' ? self : this, function() {
+    return /******/ (function(modules) { // webpackBootstrap
+        /******/ var installedModules = {};
+        /******/
+        /******/ // The require function
+        /******/ function __webpack_require__(moduleId) {
+            /******/
+            /******/ // Check if module is in cache
+            /******/ if (installedModules[moduleId]) {
+                /******/ return installedModules[moduleId].exports;
+                /******/
+            }
+            /******/ // Create a new module (and put it into the cache)
+            /******/ var module = installedModules[moduleId] = {
+                /******/ i: moduleId,
+                /******/ l: false,
+                /******/ exports: {}
+                /******/
+            };
+            /******/
+            /******/ // Execute the module function
+            /******/ modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+            /******/
+            /******/ // Flag the module as loaded
+            /******/ module.l = true;
+            /******/
+            /******/ // Return the exports of the module
+            /******/ return module.exports;
+            /******/
         }
-
-        let methodName: string;
-        if (method === "usage-global") methodName = "usageGlobal";
-        else if (method === "entry-global") methodName = "entryGlobal";
-        else if (method === "usage-pure") methodName = "usagePure";
-        else if (typeof method !== "string") {
-            throw new Error(".method must be a string");
-        } else {
-            throw new Error(`.method must be one of "entry-global", "usage-global" or "usage-pure" (received ${JSON.stringify(method)})`);
-        }
-
-        let targets;
-        if (targetsOption || configPath || ignoreBrowserslistConfig) {
-            const targetsObj = typeof targetsOption === "string" || Array.isArray(targetsOption) ? { browsers: targetsOption } : targetsOption;
-            targets = this.getTargets(targetsObj, { ignoreBrowserslistConfig, configPath });
-        } else {
-            targets = babelApi.targets();
-        }
-
-        return {
-            method,
-            methodName,
-            targets,
-            absoluteImports: absoluteImports != null ? absoluteImports : false,
-            shouldInjectPolyfill,
-            debug: !!debug,
-            providerOptions
+        /******/
+        /******/
+        /******/ // expose the modules object (__webpack_modules__)
+        /******/ __webpack_require__.m = modules;
+        /******/
+        /******/ // expose the module cache
+        /******/ __webpack_require__.c = installedModules;
+        /******/
+        /******/ // define getter function for harmony exports
+        /******/ __webpack_require__.d = function(exports, name, getter) {
+            /******/ if (!__webpack_require__.o(exports, name)) {
+                /******/ Object.defineProperty(exports, name, { enumerable: true, get: getter });
+                /******/
+            }
+            /******/
         };
-    }
+        /******/
+        /******/ // define __esModule on exports
+        /******/ __webpack_require__.r = function(exports) {
+            /******/ if (typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+                /******/ Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+                /******/
+            }
+            /******/ Object.defineProperty(exports, '__esModule', { value: true });
+            /******/
+        };
+        /******/
+        /******/ // create a fake namespace object
+        /******/ // mode & 1: value is a module id, require it
+        /******/ // mode & 2: merge all properties of value into the ns
+        /******/ // mode & 4: return value when already ns object
+        /******/ // mode & 8|1: behave like require
+        /******/ __webpack_require__.t = function(value, mode) {
+            /******/ if (mode & 1) value = __webpack_require__(value);
+            /******/ if (mode & 8) return value;
+            /******/ if ((mode & 4) && typeof value === 'object' && value && value.__esModule) return value;
+            /******/ var ns = Object.create(null);
+            /******/ __webpack_require__.r(ns);
+            /******/ Object.defineProperty(ns, 'default', { enumerable: true, value: value });
+            /******/ if (mode & 2 && typeof value != 'string') for (var key in value) __webpack_require__.d(ns, key, function(key) { return value[key]; }.bind(null, key));
+            /******/ return ns;
+            /******/
+        };
+        /******/
+        /******/ // getDefaultExport function for compatibility with non-harmony modules
+        /******/ __webpack_require__.n = function(module) {
+            /******/ var getter = module && module.__esModule ?
+                /******/ function getDefault() { return module['default']; } :
+                /******/ function getModuleExports() { return module; };
+            /******/ __webpack_require__.d(getter, 'a', getter);
+            /******/ return getter;
+            /******/
+        };
+        /******/
+        /******/ // Object.prototype.hasOwnProperty.call
+        /******/ __webpack_require__.o = function(object, property) { return Object.prototype.hasOwnProperty.call(object, property); };
+        /******/
+        /******/ // __webpack_public_path__
+        /******/ __webpack_require__.p = "";
+        /******/
+        /******/
+        /******/ // Load entry module and return exports
+        /******/ return __webpack_require__(__webpack_require__.s = "./client-src/modules/sockjs-client/index.js");
+        /******/
+    })
+    /************************************************************************/
+    ({
+        /***/ "./client-src/modules/sockjs-client/index.js":
+        /*!***************************************************!*\
+          !*** ./client-src/modules/sockjs-client/index.js ***!
+          \***************************************************/
+        /*! no static exports found */
+        /***/ (function(module, exports, __webpack_require__) {
 
-    private objectWithoutPropertiesLoose(source: any, excluded: string[]) {
-        if (source == null) return {};
-        let target: any = {};
-        let sourceKeys = Object.keys(source);
-        let key: string, i: number;
+            "use strict";
+            eval("\n\nvar _sockjsClient = __webpack_require__(/*! sockjs-client */ \"./node_modules/sockjs-client/lib/entry.js\");\n\nvar _sockjsClient2 = _interopRequireDefault(_sockjsClient);\n\nfunction _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }\n\nmodule.exports = _sockjsClient2.default; //# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,[base64-encoded-string]\n//# sourceURL=webpack-internal:///./client-src/modules/sockjs-client/index.js\n");
 
-        for (i = 0; i < sourceKeys.length; i++) {
-            key = sourceKeys[i];
-            if (excluded.indexOf(key) >= 0) continue;
-            target[key] = source[key];
-        }
-        return target;
-    }
+            /***/
+        }),
 
-    private isEmpty(obj: any): boolean {
-        return Object.keys(obj).length === 0;
-    }
+        /***/ "./node_modules/sockjs-client/lib/entry.js":
+        /*!*************************************************!*\
+          !*** ./node_modules/sockjs-client/lib/entry.js ***!
+          \*************************************************/
+        /*! no static exports found */
+        /***/ (function(module, exports) {
 
-    // Additional methods and logic would be implemented here
-}
+            eval("throw new Error(\"Module build failed (from ./node_modules/source-map-loader/dist/cjs.js):\\nError: ENOENT: no such file or directory, open '/path/to/project/node_modules/sockjs-client/lib/entry.js'\");//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,[base64-encoded-string]\n//# sourceURL=webpack-internal:///./node_modules/sockjs-client/lib/entry.js\n");
 
-export default PolyfillService;
+            /***/
+        })
+
+        /******/
+    });
+});
