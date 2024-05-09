@@ -1,128 +1,157 @@
-import { useEffect, useState } from 'react';
+import { basename, extname } from 'path';
+import { types, template } from '@babel/core';
+import { declare } from '@babel/helper-plugin-utils';
+import { 
+  isModule, 
+  getModuleName, 
+  rewriteModuleStatementsAndPrepareHeader, 
+  hasExports, 
+  isSideEffectImport, 
+  wrapInterop, 
+  buildNamespaceInitStatements, 
+  ensureStatementsHoisted 
+} from '@babel/helper-module-transforms';
 
-interface AnalyticsConfig {
-  accounts?: any[];
-  universalAnalytics?: boolean;
-  crossDomainLinker?: boolean;
-  crossLinkDomains?: string[];
-  currency?: string;
-  debugMode?: boolean;
-  delayScriptTag?: boolean;
-  disableAnalytics?: boolean;
-  displayFeatures?: boolean;
-  domainName?: string;
-  ecommerce?: boolean;
-  enhancedEcommerce?: boolean;
-  enhancedLinkAttribution?: boolean;
-  experimentId?: string;
-  hybridMobileSupport?: boolean;
-  ignoreFirstPageLoad?: boolean;
-  logAllCalls?: boolean;
-  pageEvent?: string;
-  readFromRoute?: boolean;
-  removeRegExp?: RegExp;
-  testMode?: boolean;
-  traceDebuggingMode?: boolean;
-  trackPrefix?: string;
-  trackRoutes?: boolean;
-  trackUrlParams?: boolean;
-}
+const buildPrerequisiteAssignment = template(`
+  GLOBAL_REFERENCE = GLOBAL_REFERENCE || {}
+`);
 
-class AnalyticsService {
-  private config: AnalyticsConfig;
-  private log: any[] = [];
-  private offlineQueue: any[] = [];
+const buildWrapper = template(`
+  (function (global, factory) {
+    if (typeof define === 'function' && define.amd) {
+      define(MODULE_NAME, AMD_ARGUMENTS, factory);
+    } else if (typeof exports !== 'undefined') {
+      factory(COMMONJS_ARGUMENTS);
+    } else {
+      var mod = { exports: {} };
+      factory(BROWSER_ARGUMENTS);
+      GLOBAL_TO_ASSIGN;
+    }
+  })(
+    typeof globalThis !== 'undefined' ? globalThis
+      : typeof self !== 'undefined' ? self
+      : this,
+    function(IMPORT_NAMES) {
+  })
+`);
 
-  constructor(config: AnalyticsConfig) {
-    this.config = config;
+const transformModulesUmd = declare((api, options) => {
+  api.assertVersion(7);
+  const {
+    globals,
+    exactGlobals,
+    allowTopLevelThis,
+    strict,
+    strictMode,
+    noInterop,
+    importInterop
+  } = options;
+  const constantReexports = api.assumption("constantReexports") ?? options.loose;
+  const enumerableModuleMeta = api.assumption("enumerableModuleMeta") ?? options.loose;
+
+  function buildBrowserInit(browserGlobals: any, exactGlobals: boolean, filename: string, moduleName: any) {
+    const moduleNameOrBasename = moduleName ? moduleName.value : basename(filename, extname(filename));
+    let globalToAssign = types.memberExpression(types.identifier("global"), types.identifier(types.toIdentifier(moduleNameOrBasename)));
+    let initAssignments = [];
+    if (exactGlobals) {
+      const globalName = browserGlobals[moduleNameOrBasename];
+      if (globalName) {
+        initAssignments = [];
+        const members = globalName.split(".");
+        globalToAssign = members.slice(1).reduce((accum, curr) => {
+          initAssignments.push(buildPrerequisiteAssignment({
+            GLOBAL_REFERENCE: types.cloneNode(accum)
+          }));
+          return types.memberExpression(accum, types.identifier(curr));
+        }, types.memberExpression(types.identifier("global"), types.identifier(members[0])));
+      }
+    }
+    initAssignments.push(types.expressionStatement(types.assignmentExpression("=", globalToAssign, types.memberExpression(types.identifier("mod"), types.identifier("exports")))));
+    return initAssignments;
   }
 
-  public trackPage(url: string, title?: string, custom?: object) {
-    // Implementation for tracking page views
-    console.log(`Tracking page: ${url}, Title: ${title}`);
+  function buildBrowserArg(browserGlobals: any, exactGlobals: boolean, source: string) {
+    let memberExpression;
+    if (exactGlobals) {
+      const globalRef = browserGlobals[source];
+      if (globalRef) {
+        memberExpression = globalRef.split(".").reduce((accum, curr) => types.memberExpression(accum, types.identifier(curr)), types.identifier("global"));
+      } else {
+        memberExpression = types.memberExpression(types.identifier("global"), types.identifier(types.toIdentifier(source)));
+      }
+    } else {
+      const requireName = basename(source, extname(source));
+      const globalName = browserGlobals[requireName] || requireName;
+      memberExpression = types.memberExpression(types.identifier("global"), types.identifier(types.toIdentifier(globalName)));
+    }
+    return memberExpression;
   }
 
-  public trackEvent(category: string, action: string, label?: string, value?: number, noninteraction?: boolean, custom?: object) {
-    // Implementation for tracking events
-    console.log(`Event Category: ${category}, Action: ${action}, Label: ${label}, Value: ${value}`);
-  }
+  return {
+    name: "transform-modules-umd",
+    visitor: {
+      Program: {
+        exit(path) {
+          if (!isModule(path)) return;
+          const browserGlobals = globals || {};
+          const moduleName = getModuleName(this.file.opts, options);
+          let moduleNameLiteral;
+          if (moduleName) moduleNameLiteral = types.stringLiteral(moduleName);
+          const { meta, headers } = rewriteModuleStatementsAndPrepareHeader(path, {
+            constantReexports,
+            enumerableModuleMeta,
+            strict,
+            strictMode,
+            allowTopLevelThis,
+            noInterop,
+            importInterop,
+            filename: this.file.opts.filename
+          });
+          const amdArgs = [];
+          const commonjsArgs = [];
+          const browserArgs = [];
+          const importNames = [];
+          if (hasExports(meta)) {
+            amdArgs.push(types.stringLiteral("exports"));
+            commonjsArgs.push(types.identifier("exports"));
+            browserArgs.push(types.memberExpression(types.identifier("mod"), types.identifier("exports")));
+            importNames.push(types.identifier(meta.exportName));
+          }
+          for (const [source, metadata] of meta.source) {
+            amdArgs.push(types.stringLiteral(source));
+            commonjsArgs.push(types.callExpression(types.identifier("require"), [types.stringLiteral(source)]));
+            browserArgs.push(buildBrowserArg(browserGlobals, exactGlobals, source));
+            importNames.push(types.identifier(metadata.name));
+            if (!isSideEffectImport(metadata)) {
+              const interop = wrapInterop(path, types.identifier(metadata.name), metadata.interop);
+              if (interop) {
+                const header = types.expressionStatement(types.assignmentExpression("=", types.identifier(metadata.name), interop));
+                header.loc = meta.loc;
+                headers.push(header);
+              }
+            }
+            headers.push(...buildNamespaceInitStatements(meta, metadata, constantReexports));
+          }
+          ensureStatementsHoisted(headers);
+          path.unshiftContainer("body", headers);
+          const { body, directives } = path.node;
+          path.node.directives = [];
+          path.node.body = [];
+          const umdWrapper = path.pushContainer("body", [buildWrapper({
+            MODULE_NAME: moduleNameLiteral,
+            AMD_ARGUMENTS: types.arrayExpression(amdArgs),
+            COMMONJS_ARGUMENTS: commonjsArgs,
+            BROWSER_ARGUMENTS: browserArgs,
+            IMPORT_NAMES: importNames,
+            GLOBAL_TO_ASSIGN: buildBrowserInit(browserGlobals, exactGlobals, this.filename || "unknown", moduleNameLiteral)
+          })])[0];
+          const umdFactory = umdWrapper.get("expression.arguments")[1].get("body");
+          umdFactory.pushContainer("directives", directives);
+          umdFactory.pushContainer("body", body);
+        }
+      }
+    }
+  };
+});
 
-  public addTransaction(transactionId: string, affiliation: string, total: number, tax: number, shipping: number, city?: string, state?: string, country?: string, currency?: string) {
-    // Implementation for adding a transaction
-    console.log(`Transaction ID: ${transactionId}, Total: ${total}`);
-  }
-
-  public addItem(transactionId: string, sku: string, name: string, category: string, price: number, quantity: number) {
-    // Implementation for adding an item to a transaction
-    console.log(`Add Item: ${name}, Quantity: ${quantity}`);
-  }
-
-  public trackTransaction() {
-    // Implementation for tracking a transaction
-    console.log('Transaction tracked');
-  }
-
-  public clearTransactions() {
-    // Implementation for clearing transactions
-    console.log('Transactions cleared');
-  }
-
-  public setAction(action: string, obj?: object) {
-    // Implementation for setting an action
-    console.log(`Action set: ${action}`);
-  }
-
-  public trackDetail() {
-    // Implementation for tracking details
-    console.log('Detail tracked');
-  }
-
-  public trackCart(action: string, listName: string) {
-    // Implementation for tracking cart operations
-    console.log(`Cart action: ${action}, List: ${listName}`);
-  }
-
-  public trackCheckout(step: number, option: string) {
-    // Implementation for tracking checkout
-    console.log(`Checkout Step: ${step}, Option: ${option}`);
-  }
-
-  public trackTimings(timingCategory: string, timingVar: string, timingValue: number, timingLabel?: string) {
-    // Implementation for tracking user timings
-    console.log(`Timing Category: ${timingCategory}, Variable: ${timingVar}, Value: ${timingValue}`);
-  }
-
-  public trackException(description: string, isFatal: boolean) {
-    // Implementation for tracking exceptions
-    console.log(`Exception: ${description}, Fatal: ${isFatal}`);
-  }
-
-  public pageView() {
-    // Implementation for sending a page view
-    console.log('Page view sent');
-  }
-
-  public send(obj: object) {
-    // Implementation for sending custom events or configurations
-    console.log('Custom data sent');
-  }
-
-  public set(name: string, value: any, trackerName?: string) {
-    // Implementation for setting custom dimensions, metrics, or experiments
-    console.log(`Set: ${name}, Value: ${value}`);
-  }
-}
-
-export default AnalyticsService;
-
-// Usage example in a React component
-const useAnalytics = (config: AnalyticsConfig) => {
-  const [analytics, setAnalytics] = useState<AnalyticsService | null>(null);
-
-  useEffect(() => {
-    const analyticsService = new AnalyticsService(config);
-    setAnalytics(analyticsService);
-  }, [config]);
-
-  return analytics;
-};
+export default transformModulesUmd;
