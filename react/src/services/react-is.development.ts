@@ -1,102 +1,51 @@
-/**
- * @license React
- * react-is.development.ts
- *
- * Copyright (c) Facebook, Inc. and its affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- */
+type ReactType = string | Function | object | symbol;
 
-const REACT_ELEMENT_TYPE = Symbol.for('react.element');
-const REACT_PORTAL_TYPE = Symbol.for('react.portal');
-const REACT_FRAGMENT_TYPE = Symbol.for('react.fragment');
-const REACT_STRICT_MODE_TYPE = Symbol.for('react.strict_mode');
-const REACT_PROFILER_TYPE = Symbol.for('react.profiler');
-const REACT_PROVIDER_TYPE = Symbol.for('react.provider');
-const REACT_CONTEXT_TYPE = Symbol.for('react.context');
-const REACT_SERVER_CONTEXT_TYPE = Symbol.for('react.server_context');
-const REACT_FORWARD_REF_TYPE = Symbol.for('react.forward_ref');
-const REACT_SUSPENSE_TYPE = Symbol.for('react.suspense');
-const REACT_SUSPENSE_LIST_TYPE = Symbol.for('react.suspense_list');
-const REACT_MEMO_TYPE = Symbol.for('react.memo');
-const REACT_LAZY_TYPE = Symbol.for('react.lazy');
-const REACT_OFFSCREEN_TYPE = Symbol.for('react.offscreen');
+export class ReactTypeChecker {
+  private static hasSymbol = typeof Symbol === 'function' && Symbol.for;
 
-const REACT_MODULE_REFERENCE = Symbol.for('react.module.reference');
+  private static REACT_ELEMENT_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.element') : 0xeac7;
+  private static REACT_PORTAL_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.portal') : 0xeaca;
+  private static REACT_FRAGMENT_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.fragment') : 0xeacb;
+  private static REACT_STRICT_MODE_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.strict_mode') : 0xeacc;
+  private static REACT_PROFILER_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.profiler') : 0xead2;
+  private static REACT_PROVIDER_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.provider') : 0xeacd;
+  private static REACT_CONTEXT_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.context') : 0xeace;
+  private static REACT_FORWARD_REF_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.forward_ref') : 0xead0;
+  private static REACT_SUSPENSE_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.suspense') : 0xead1;
+  private static REACT_MEMO_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.memo') : 0xead3;
+  private static REACT_LAZY_TYPE = ReactTypeChecker.hasSymbol ? Symbol.for('react.lazy') : 0xead4;
 
-function isValidElementType(type: any): boolean {
-    if (typeof type === 'string' || typeof type === 'function') {
-        return true;
-    }
+  public static isValidElementType(type: ReactType): boolean {
+    return typeof type === 'string' || typeof type === 'function' ||
+      type === ReactTypeChecker.REACT_FRAGMENT_TYPE ||
+      type === ReactTypeChecker.REACT_PROFILER_TYPE ||
+      type === ReactTypeChecker.REACT_STRICT_MODE_TYPE ||
+      type === ReactTypeChecker.REACT_SUSPENSE_TYPE ||
+      typeof type === 'object' && type !== null && (
+        type['$$typeof'] === ReactTypeChecker.REACT_LAZY_TYPE ||
+        type['$$typeof'] === ReactTypeChecker.REACT_MEMO_TYPE ||
+        type['$$typeof'] === ReactTypeChecker.REACT_PROVIDER_TYPE ||
+        type['$$typeof'] === ReactTypeChecker.REACT_CONTEXT_TYPE ||
+        type['$$typeof'] === ReactTypeChecker.REACT_FORWARD_REF_TYPE
+      );
+  }
 
-    if (type === REACT_FRAGMENT_TYPE || type === REACT_PROFILER_TYPE || type === REACT_STRICT_MODE_TYPE || type === REACT_SUSPENSE_TYPE || type === REACT_SUSPENSE_LIST_TYPE || type === REACT_OFFSCREEN_TYPE) {
-        return true;
-    }
-
-    if (typeof type === 'object' && type !== null) {
-        if (type.$$typeof === REACT_LAZY_TYPE || type.$$typeof === REACT_MEMO_TYPE || type.$$typeof === REACT_PROVIDER_TYPE || type.$$typeof === REACT_CONTEXT_TYPE || type.$$typeof === REACT_FORWARD_REF_TYPE || type.$$typeof === REACT_MODULE_REFERENCE || type.getModuleId !== undefined) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-function typeOf(object: any) {
+  public static typeOf(object: any): symbol | undefined {
     if (typeof object === 'object' && object !== null) {
-        const $$typeof = object.$$typeof;
+      const $$typeof = object['$$typeof'];
 
-        switch ($$typeof) {
-            case REACT_ELEMENT_TYPE:
-                const type = object.type;
-
-                switch (type) {
-                    case REACT_FRAGMENT_TYPE:
-                    case REACT_PROFILER_TYPE:
-                    case REACT_STRICT_MODE_TYPE:
-                    case REACT_SUSPENSE_TYPE:
-                    case REACT_SUSPENSE_LIST_TYPE:
-                        return type;
-
-                    default:
-                        const $$typeofType = type && type.$$typeof;
-
-                        switch ($$typeofType) {
-                            case REACT_SERVER_CONTEXT_TYPE:
-                            case REACT_CONTEXT_TYPE:
-                            case REACT_FORWARD_REF_TYPE:
-                            case REACT_LAZY_TYPE:
-                            case REACT_MEMO_TYPE:
-                            case REACT_PROVIDER_TYPE:
-                                return $$typeofType;
-
-                            default:
-                                return $$typeof;
-                        }
-                }
-
-            case REACT_PORTAL_TYPE:
-                return $$typeof;
-        }
+      switch ($$typeof) {
+        case ReactTypeChecker.REACT_ELEMENT_TYPE:
+          return $$typeof;
+        case ReactTypeChecker.REACT_PORTAL_TYPE:
+          return $$typeof;
+        default:
+          return undefined;
+      }
     }
 
     return undefined;
-}
+  }
 
-export {
-    isValidElementType,
-    typeOf,
-    REACT_ELEMENT_TYPE as Element,
-    REACT_PORTAL_TYPE as Portal,
-    REACT_FRAGMENT_TYPE as Fragment,
-    REACT_STRICT_MODE_TYPE as StrictMode,
-    REACT_PROFILER_TYPE as Profiler,
-    REACT_PROVIDER_TYPE as ContextProvider,
-    REACT_CONTEXT_TYPE as ContextConsumer,
-    REACT_FORWARD_REF_TYPE as ForwardRef,
-    REACT_SUSPENSE_TYPE as Suspense,
-    REACT_SUSPENSE_LIST_TYPE as SuspenseList,
-    REACT_MEMO_TYPE as Memo,
-    REACT_LAZY_TYPE as Lazy
-};
+  // Additional methods to check specific types can be added here
+}
