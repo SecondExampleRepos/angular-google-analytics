@@ -1,26 +1,22 @@
 import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import { BrowserRouter as Router, Route, Switch } from 'react-router-dom';
+import useRootScope from './hooks/useRootScope';
+import SomeComponent from './components/SomeComponent'; // Replace with actual component imports
+import AnotherComponent from './components/AnotherComponent'; // Replace with actual component imports
+import YetAnotherComponent from './components/YetAnotherComponent'; // Replace with actual component imports
 
-function App() {
+const App = () => {
+  const { exampleState, setExampleState, exampleFunction } = useRootScope();
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <Switch>
+        <Route path="/some-path" component={SomeComponent} />
+        <Route path="/another-path" component={AnotherComponent} />
+        <Route path="/yet-another-path" component={YetAnotherComponent} />
+      </Switch>
+    </Router>
   );
-}
+};
 
 export default App;
