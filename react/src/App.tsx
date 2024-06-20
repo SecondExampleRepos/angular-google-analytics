@@ -1,26 +1,36 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Route, Switch } from 'react-router-dom';
+import useRootScope from './hooks/useRootScope';
 
-function App() {
+// Importing all the routes
+import Home from './routes/Home';
+import About from './routes/About';
+import Contact from './routes/Contact';
+import NotFound from './routes/NotFound';
+
+const App: React.FC = () => {
+  const { someState, setSomeState, someFunction } = useRootScope();
+
+  useEffect(() => {
+    // Placeholder for any initialization logic
+    const initialize = () => {
+      // Example initialization logic
+      setSomeState('initialized');
+    };
+
+    initialize();
+  }, [setSomeState]);
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <Switch>
+        <Route exact path="/" component={Home} />
+        <Route path="/about" component={About} />
+        <Route path="/contact" component={Contact} />
+        <Route component={NotFound} />
+      </Switch>
+    </Router>
   );
-}
+};
 
 export default App;
